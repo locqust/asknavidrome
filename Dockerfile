@@ -1,14 +1,16 @@
 FROM alpine:3.22.1 AS build
-LABEL maintainer="Ross Stewart <rosskouk@gmail.com>"
-LABEL org.opencontainers.image.source=https://github.com/rosskouk/asknavidrome
+LABEL maintainer="locqust"
+LABEL org.opencontainers.image.source=https://github.com/locqust/asknavidrome
 
-RUN apk add python3 py3-pip git build-base python3-dev libffi-dev openssl-dev
+RUN apk add python3 py3-pip build-base python3-dev libffi-dev openssl-dev
 
 WORKDIR /opt
 
 RUN python3 -m venv env
 
-RUN git clone https://github.com/rosskouk/asknavidrome.git
+# Copy the skill source from the build context (this repo)
+# rather than cloning upstream, so local changes are included.
+COPY skill /opt/asknavidrome/skill
 
 WORKDIR /opt/asknavidrome
 
@@ -16,8 +18,8 @@ RUN source ../env/bin/activate && pip --no-cache-dir install wheel && pip --no-c
 
 
 FROM alpine:3.22.1
-LABEL maintainer="Ross Stewart <rosskouk@gmail.com>"
-LABEL org.opencontainers.image.source=https://github.com/rosskouk/asknavidrome
+LABEL maintainer="locqust"
+LABEL org.opencontainers.image.source=https://github.com/locqust/asknavidrome
 
 RUN apk add python3
 
