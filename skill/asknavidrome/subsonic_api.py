@@ -336,6 +336,26 @@ class SubsonicConnection:
         else:
             return None
 
+    def get_cover_art(self, cover_id: str, size: int = 300) -> bytes:
+        """Fetch cover art image bytes from Navidrome.
+
+        Used by the /cover/<id> proxy route in app.py so that Alexa can
+        retrieve album art without ever seeing Navidrome credentials.
+
+        :param str cover_id: The Subsonic coverArt ID (e.g. 'al-3f2c8a…')
+        :param int size: Maximum pixel dimension to request. Defaults to 300
+        :return: Raw image bytes (JPEG)
+        :rtype: bytes
+        """
+        self.logger.debug(f'In function get_cover_art() id={cover_id}')
+
+        # conn._getRequest builds the correct authenticated URL for us.
+        # We add 'size' as an extra parameter.
+        request = self.conn._getRequest('getCoverArt.view', {'id': cover_id, 'size': size})
+        response = self.conn._doBinReq(request)
+
+        return response.read()
+
     def get_song_details(self, id: str) -> dict:
         """Get details about a given song ID
 

@@ -15,9 +15,35 @@ from .media_queue import MediaQueue
 
 logger = logging.getLogger(__name__)
 
+# Fallback art URL (the Navidrome logo) used when a track has no coverArt ID.
+# This is also the value used before NAVI_BASE_URL is configured.
+_FALLBACK_ART_URL = 'https://github.com/navidrome/navidrome/raw/master/resources/logo-192x192.png'
+
+# Set by app.py once NAVI_BASE_URL is read from the environment.
+# controller.py reads this to build proxied cover-art URLs.
+base_url: str = ''
+
 #
 # Functions
 #
+
+
+def _art_url(track_details: Track) -> str:
+    """Return the cover art URL to embed in AudioItemMetadata.
+
+    If base_url has been configured and the track has a coverArt ID, returns
+    a URL pointing at our own /cover/<id> proxy endpoint so that Alexa fetches
+    the image through AskNavidrome (no Navidrome credentials in the URL).
+
+    Falls back to the static Navidrome logo if either value is missing.
+
+    :param Track track_details: The track whose art is needed
+    :return: An HTTPS URL for the album art image
+    :rtype: str
+    """
+    if base_url and track_details.cover_art:
+        return f'{base_url}/cover/{track_details.cover_art}'
+    return _FALLBACK_ART_URL
 
 
 def start_playback(mode: str, text: str, card_data: dict, track_details: Track, handler_input: HandlerInput) -> Response:
@@ -44,15 +70,17 @@ def start_playback(mode: str, text: str, card_data: dict, track_details: Track, 
     """
     metadata = AudioItemMetadata(
         title=track_details.title,
-        subtitle=track_details.artist,
+        subtitle=f'{track_details.artist} — {track_details.album}',
         art=display.Image(
-                content_description=track_details.title,
-                sources=[
-                    display.ImageInstance(
-                        url='https://github.com/navidrome/navidrome/raw/master/resources/logo-192x192.png'
-                    )
-                ]
-            )                                                              
+            content_description=track_details.title,
+            sources=[
+                display.ImageInstance(
+                    url=_art_url(track_details)
+                )
+            ]
+        )
+        # background_image intentionally omitted — we only want the square
+        # thumbnail icon, not a full-bleed backdrop.
     )
     
     if mode == 'play':
@@ -133,19 +161,23 @@ def stop(handler_input: HandlerInput) -> Response:
     return handler_input.response_builder.response
 
 
-def add_screen_background(card_data: dict) -> Union[AudioItemMetadata, None]:
-    """Add background to card.
+def add_screen_background(card_data: dict, track_details: Track = None) -> Union[AudioItemMetadata, None]:
+    """Add now-playing metadata for devices with screens.
 
-    Cards are viewable on devices with screens and in the Alexa
-    app.
+    Builds an AudioItemMetadata object with the track's album art served
+    through the AskNavidrome cover-art proxy, so Alexa never needs to
+    authenticate directly against Navidrome.
 
     :param dict card_data: Dictionary containing card data
+    :param Track track_details: Optional Track object; used to resolve cover art URL
     :return: An Amazon AudioItemMetadata object or None if card data is not present
     :rtype: AudioItemMetadata | None
     """
     logger.debug('In add_screen_background()')
 
     if card_data:
+        art_source = _art_url(track_details) if track_details else _FALLBACK_ART_URL
+
         metadata = AudioItemMetadata(
             title=card_data['title'],
             subtitle=card_data['text'],
@@ -153,18 +185,11 @@ def add_screen_background(card_data: dict) -> Union[AudioItemMetadata, None]:
                 content_description=card_data['title'],
                 sources=[
                     display.ImageInstance(
-                        url='https://github.com/navidrome/navidrome/raw/master/resources/logo-192x192.png'
-                    )
-                ]
-            ),
-            background_image=display.Image(
-                content_description=card_data['title'],
-                sources=[
-                    display.ImageInstance(
-                        url='https://github.com/navidrome/navidrome/raw/master/resources/logo-192x192.png'
+                        url=art_source
                     )
                 ]
             )
+            # background_image intentionally omitted — square thumbnail only.
         )
 
         return metadata
@@ -201,7 +226,8 @@ def enqueue_songs(api: SubsonicConnection, queue: MediaQueue, song_id_list: list
                           song_details.get('song').get('bitRate'),
                           song_uri,
                           0,
-                          None)
+                          None,
+                          song_details.get('song').get('coverArt', ''))
 
         # Add track object to queue
         queue.add_track(new_track)

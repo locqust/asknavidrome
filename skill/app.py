@@ -1,5 +1,6 @@
 from datetime import datetime
-from flask import Flask, render_template
+import io
+from flask import Flask, render_template, send_file
 import logging
 from multiprocessing import Process
 from multiprocessing.managers import BaseManager
@@ -143,6 +144,17 @@ except NameError as err:
     logger.error(f'The Navidrome API version was not found! {err}')
     raise
 
+# NAVI_BASE_URL is the public HTTPS URL of this AskNavidrome instance,
+# e.g. https://asknavidrome.yourdomain.com
+# It is used to build proxied cover-art URLs that Alexa can fetch without
+# any Navidrome credentials being visible in the URL.
+# Optional: if not set, the Navidrome logo fallback is used instead.
+navi_base_url = os.getenv('NAVI_BASE_URL', '').rstrip('/')
+if navi_base_url:
+    logger.info(f'Cover art proxy base URL set to: {navi_base_url}')
+else:
+    logger.warning('NAVI_BASE_URL is not set — album art will show the Navidrome logo instead of cover art')
+
 logger.debug('Configuration has been successfully loaded')
 
 # Set log level based on config value
@@ -201,6 +213,10 @@ try:
 
 except:
     raise RuntimeError('Could not connect to SubSonic API!')
+
+# Pass the public base URL through to the controller so it can build
+# proxied cover-art URLs without needing to import app-level config directly.
+controller.base_url = navi_base_url
 
 logger.info('AskNavidrome Web Service is ready to start!')
 
@@ -1142,6 +1158,32 @@ if navidrome_log_level >= 2:
 
 sa = SkillAdapter(skill=sb.create(), skill_id='test', app=app)
 sa.register(app=app, route='/')
+
+
+@app.route('/cover/<cover_id>')
+def cover_art_proxy(cover_id):
+    """Proxy cover art from Navidrome.
+
+    Fetches the album art image from Navidrome server-side using the stored
+    credentials and streams it back to the caller (Alexa).  This means the
+    URL that Alexa sees contains no Navidrome auth details whatsoever.
+
+    The cover_id comes from the Subsonic API 'coverArt' field on a song object,
+    e.g. 'al-3f2c8a…'.  A 300px render is requested — enough for the Echo Show
+    now-playing thumbnail without wasting bandwidth.
+
+    Returns 404 if the image cannot be fetched so Alexa degrades gracefully.
+    """
+    try:
+        image_bytes = connection.get_cover_art(cover_id, size=300)
+        return send_file(
+            io.BytesIO(image_bytes),
+            mimetype='image/jpeg',
+            max_age=3600  # Cache for 1 hour — album art rarely changes
+        )
+    except Exception as e:
+        logger.warning(f'Cover art proxy failed for id={cover_id}: {e}')
+        return '', 404
 
 # Enable queue and history diagnostics
 if navidrome_log_level == 3:

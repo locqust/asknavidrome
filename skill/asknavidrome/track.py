@@ -6,7 +6,7 @@ class Track:
                  id: str = '', title: str = '', artist: str = '', artist_id: str = '',
                  album: str = '', album_id: str = '', track_no: int = 0, year: int = 0,
                  genre: str = '', duration: int = 0, bitrate: int = 0, uri: str = '',
-                 offset: int = 0, previous_id: str = '') -> None:
+                 offset: int = 0, previous_id: str = '', cover_art: str = '') -> None:
         """
         :param str id: The song ID. Defaults to ''
         :param str title: The song title. Defaults to ''
@@ -22,6 +22,7 @@ class Track:
         :param str uri: The song's URI for streaming. Defaults to ''
         :param int offset: The position in the track to start playback in milliseconds. Defaults to 0
         :param str previous_id: The ID of the previous song in the playlist. Defaults to ''
+        :param str cover_art: The Subsonic coverArt ID for this track's album. Defaults to ''
         :return: None
         """
 
@@ -39,3 +40,4 @@ class Track:
         self.uri: str = uri
         self.offset: int = offset
         self.previous_id: str = previous_id
+        self.cover_art: str = cover_art
