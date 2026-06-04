@@ -458,7 +458,8 @@ class NaviSonicPlaySongByArtist(AbstractRequestHandler):
     """Handle the NaviSonicPlaySongByArtist intent
 
     Play the given song by the given artist if it exists in the
-    collection.
+    collection.  If no artist is provided, plays the first matching
+    song by title alone.
     """
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
@@ -471,43 +472,56 @@ class NaviSonicPlaySongByArtist(AbstractRequestHandler):
         artist = get_slot_value_v2(handler_input, 'artist')
         song = get_slot_value_v2(handler_input, 'song')
 
-        logger.debug(f'Searching for the song {song.value} by {artist.value}')
+        if artist is not None:
+            # Artist and song both provided — filter results by artist
+            logger.debug(f'Searching for the song {song.value} by {artist.value}')
 
-        # Search for the artist
-        artist_lookup = connection.search_artist(artist.value)
+            artist_lookup = connection.search_artist(artist.value)
 
-        if artist_lookup is None:
-            text = sanitise_speech_output(f"I couldn't find the artist {artist.value} in the collection.")
-            handler_input.response_builder.speak(text).ask(text)
+            if artist_lookup is None:
+                text = sanitise_speech_output(f"I couldn't find the artist {artist.value} in the collection.")
+                handler_input.response_builder.speak(text).ask(text)
+                return handler_input.response_builder.response
 
-            return handler_input.response_builder.response
-
-        else:
             artist_id = artist_lookup[0].get('id')
-
-            # Search for song
             song_list = connection.search_song(song.value)
 
-            # Search for song by given artist.
+            if not song_list:
+                text = sanitise_speech_output(f"I couldn't find a song called {song.value} in the collection.")
+                handler_input.response_builder.speak(text).ask(text)
+                return handler_input.response_builder.response
+
             song_dets = [item.get('id') for item in song_list if item.get('artistId') == artist_id]
 
             if not song_dets:
                 text = sanitise_speech_output(f"I couldn't find a song called {song.value} by {artist.value} in the collection.")
                 handler_input.response_builder.speak(text).ask(text)
-
                 return handler_input.response_builder.response
 
-            play_queue.clear()
-            controller.enqueue_songs(connection, play_queue, song_dets)
-
             speech = sanitise_speech_output(f'Playing {song.value} by {artist.value}')
-            logger.info(speech)
-            card = {'title': 'AskNavidrome',
-                    'text': speech
-                    }
-            track_details = play_queue.get_next_track()
 
-            return controller.start_playback('play', speech, card, track_details, handler_input)
+        else:
+            # Song title only — play the first matching result regardless of artist
+            logger.debug(f'Searching for the song {song.value} (no artist specified)')
+
+            song_list = connection.search_song(song.value)
+
+            if not song_list:
+                text = sanitise_speech_output(f"I couldn't find a song called {song.value} in the collection.")
+                handler_input.response_builder.speak(text).ask(text)
+                return handler_input.response_builder.response
+
+            song_dets = [item.get('id') for item in song_list]
+            speech = sanitise_speech_output(f'Playing {song.value}')
+
+        play_queue.clear()
+        controller.enqueue_songs(connection, play_queue, song_dets)
+
+        logger.info(speech)
+        card = {'title': 'AskNavidrome', 'text': speech}
+        track_details = play_queue.get_next_track()
+
+        return controller.start_playback('play', speech, card, track_details, handler_input)
 
 
 class NaviSonicPlayPlaylist(AbstractRequestHandler):
