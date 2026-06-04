@@ -950,6 +950,52 @@ class PreviousPlaybackHandler(AbstractRequestHandler):
         return controller.start_playback('play', None, None, track_details, handler_input)
 
 
+class PlaybackControllerPlayHandler(AbstractRequestHandler):
+    """Handle PlaybackController.PlayCommandIssued
+
+    Fired when the user taps the play/resume button on the Echo Show
+    transport controls.  Mirrors the behaviour of ResumePlaybackHandler.
+    """
+
+    def can_handle(self, handler_input: HandlerInput) -> bool:
+        return is_request_type('PlaybackController.PlayCommandIssued')(handler_input)
+
+    def handle(self, handler_input: HandlerInput) -> Response:
+        logger.debug('In PlaybackControllerPlayHandler')
+
+        current_track = play_queue.get_current_track()
+
+        if current_track.offset > 0:
+            # Resume from where we paused
+            logger.info(f'PlaybackController resume: {current_track.title} at offset {current_track.offset}')
+            return controller.start_playback('play', None, None, current_track, handler_input)
+
+        elif play_queue.get_queue_count() > 0 and current_track.offset == 0:
+            # Nothing paused, start next track in queue
+            logger.info('PlaybackController play: no paused track, getting next from queue')
+            track_details = play_queue.get_next_track()
+            return controller.start_playback('play', None, None, track_details, handler_input)
+
+        return handler_input.response_builder.response
+
+
+class PlaybackControllerPauseHandler(AbstractRequestHandler):
+    """Handle PlaybackController.PauseCommandIssued
+
+    Fired when the user taps the pause button on the Echo Show
+    transport controls.  Mirrors the behaviour of PausePlaybackHandler.
+    """
+
+    def can_handle(self, handler_input: HandlerInput) -> bool:
+        return is_request_type('PlaybackController.PauseCommandIssued')(handler_input)
+
+    def handle(self, handler_input: HandlerInput) -> Response:
+        logger.debug('In PlaybackControllerPauseHandler')
+        play_queue.sync()
+
+        return controller.stop(handler_input)
+
+
 class PlaybackFailedEventHandler(AbstractRequestHandler):
     """AudioPlayer.PlaybackFailed Directive received.
 
@@ -1143,6 +1189,8 @@ sb.add_request_handler(PlaybackFinishedHandler())
 sb.add_request_handler(PausePlaybackHandler())
 sb.add_request_handler(NextPlaybackHandler())
 sb.add_request_handler(PreviousPlaybackHandler())
+sb.add_request_handler(PlaybackControllerPlayHandler())
+sb.add_request_handler(PlaybackControllerPauseHandler())
 sb.add_request_handler(ResumePlaybackHandler())
 sb.add_request_handler(PlaybackFailedEventHandler())
 
