@@ -139,7 +139,9 @@
                         "Play the song {song} by the band {artist}",
                         "Play {song} by the band {artist}",
                         "Play {song} by {artist}",
-                        "Play the song {song} by the artist {artist}"
+                        "Play the song {song} by the artist {artist}",
+                        "Play the song {song}",
+                        "Play {song}"
                     ]
                 },
                 {
